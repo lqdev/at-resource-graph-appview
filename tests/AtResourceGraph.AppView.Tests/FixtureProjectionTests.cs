@@ -42,6 +42,8 @@ public sealed class FixtureProjectionTests
                 Assert.Equal("syndication", response.Members[0].Projected?.Kind);
                 Assert.Equal("post", response.Members[1].Projected?.Kind);
                 Assert.Equal("bafyfixturecid", response.Members[1].Projected?.Metadata["cid"]);
+                Assert.Equal("bafyfixturecid", response.Members[1].SourceCid);
+                Assert.Equal("fixture-rev-2", response.Members[1].SourceRevision);
             }
         }
         finally
@@ -102,6 +104,7 @@ public sealed class FixtureProjectionTests
                 Assert.Equal("Fixture reading list (updated)", bundle.Name);
                 Assert.Equal("Updated fixture post", bundle.Members[1].Label);
                 Assert.Equal("A public fixture post.", bundle.Members[1].Projected?.Text);
+                Assert.Equal("fixture-rev-2", bundle.Members[1].SourceRevision);
 
                 var missing = await client.GetAsync(
                     "/xrpc/me.lqdev.resourcegraph.appview.getBundle?bundle=at%3A%2F%2Fmissing");
@@ -141,6 +144,95 @@ public sealed class FixtureProjectionTests
                 Assert.Equal("https://example.test/feeds/reading.xml", result.Value.Resources[0].Reference.Identity);
                 Assert.Equal("at://did:plc:fixture/app.bsky.feed.post/3fixture", result.Value.Resources[1].Reference.Identity);
             }
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task AggregateReadUsesOneSnapshotAcrossHeaderMembersAndDiagnostics()
+    {
+        var databasePath = NewDatabasePath();
+        try
+        {
+            using (var store = new ProjectionStore($"Data Source={databasePath}"))
+            using (var writerStore = new ProjectionStore($"Data Source={databasePath}"))
+            {
+                await store.InitializeAsync();
+                await ImportMainFixturesAsync(store);
+                await using var writerConnection =
+                    await writerStore.OpenConnectionAsync(CancellationToken.None);
+
+                var headerRead = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                var releaseChildren = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                store.BeforeAggregateChildrenReadAsync = _ =>
+                {
+                    headerRead.SetResult();
+                    return releaseChildren.Task;
+                };
+
+                var readTask = store.ReadBundleAsync(BundleIdentity);
+                await headerRead.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await using (var writerTransaction = writerConnection.BeginTransaction())
+                await using (var deleteCommand = writerConnection.CreateCommand())
+                {
+                    deleteCommand.Transaction = writerTransaction;
+                    deleteCommand.CommandText =
+                        "DELETE FROM bundles WHERE bundle_identity = $identity;";
+                    deleteCommand.Parameters.AddWithValue("$identity", BundleIdentity);
+                    await deleteCommand.ExecuteNonQueryAsync();
+                    await writerTransaction.CommitAsync();
+                }
+
+                releaseChildren.SetResult();
+                var snapshot = await readTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+                Assert.NotNull(snapshot);
+                Assert.Equal("Fixture reading list (updated)", snapshot.Name);
+                Assert.Equal(2, snapshot.Members.Count);
+                Assert.Empty(snapshot.Diagnostics);
+            }
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task OperationalConnectionsEnforceForeignKeysAndCascade()
+    {
+        var databasePath = NewDatabasePath();
+        try
+        {
+            using var store = new ProjectionStore($"Data Source={databasePath}");
+            await store.InitializeAsync();
+            await ImportMainFixturesAsync(store);
+
+            await using var connection = await store.OpenConnectionAsync(CancellationToken.None);
+            await using (var pragmaCommand = connection.CreateCommand())
+            {
+                pragmaCommand.CommandText = "PRAGMA foreign_keys;";
+                Assert.Equal(1L, (long)(await pragmaCommand.ExecuteScalarAsync())!);
+            }
+
+            await using (var deleteCommand = connection.CreateCommand())
+            {
+                deleteCommand.CommandText =
+                    "DELETE FROM bundles WHERE bundle_identity = $identity;";
+                deleteCommand.Parameters.AddWithValue("$identity", BundleIdentity);
+                Assert.Equal(1, await deleteCommand.ExecuteNonQueryAsync());
+            }
+
+            await using var countCommand = connection.CreateCommand();
+            countCommand.CommandText =
+                "SELECT COUNT(*) FROM bundle_members WHERE bundle_identity = $identity;";
+            countCommand.Parameters.AddWithValue("$identity", BundleIdentity);
+            Assert.Equal(0L, (long)(await countCommand.ExecuteScalarAsync())!);
         }
         finally
         {

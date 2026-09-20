@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using ResourceGraph.Core;
@@ -11,6 +12,9 @@ public sealed class ProjectionStore : IDisposable
     private readonly string connectionString;
     private readonly SemaphoreSlim initializationGate = new(1, 1);
     private bool initialized;
+
+    // Test-only checkpoint for proving the aggregate snapshot survives a concurrent writer.
+    internal Func<CancellationToken, Task>? BeforeAggregateChildrenReadAsync { get; set; }
 
     public ProjectionStore(string connectionString)
     {
@@ -41,7 +45,7 @@ public sealed class ProjectionStore : IDisposable
             await using var command = connection.CreateCommand();
             command.CommandText =
                 """
-                PRAGMA foreign_keys = ON;
+                PRAGMA journal_mode = WAL;
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version INTEGER PRIMARY KEY
                 );
@@ -222,36 +226,47 @@ public sealed class ProjectionStore : IDisposable
 
         await InitializeAsync(cancellationToken);
         await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var bundleCommand = connection.CreateCommand();
-        bundleCommand.CommandText =
-            """
-            SELECT bundle_identity, name, description, self_uri, source_cid, source_revision,
-                   projection_version, indexed_at
-            FROM bundles
-            WHERE bundle_identity = $identity AND deleted_at IS NULL;
-            """;
-        SqliteValue.Add(bundleCommand, "$identity", bundleIdentity);
-        await using var reader = await bundleCommand.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        await using var transaction = connection.BeginTransaction(
+            IsolationLevel.ReadCommitted,
+            deferred: true);
+        StoredBundleProjection projection;
+        await using (var bundleCommand = connection.CreateCommand())
         {
-            return null;
+            bundleCommand.Transaction = transaction;
+            bundleCommand.CommandText =
+                """
+                SELECT bundle_identity, name, description, self_uri, source_cid, source_revision,
+                       projection_version, indexed_at
+                FROM bundles
+                WHERE bundle_identity = $identity AND deleted_at IS NULL;
+                """;
+            SqliteValue.Add(bundleCommand, "$identity", bundleIdentity);
+            await using var reader = await bundleCommand.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return null;
+            }
+
+            projection = new StoredBundleProjection(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.GetInt32(6),
+                ParseTimestamp(reader.GetString(7)),
+                Array.Empty<StoredMember>(),
+                Array.Empty<GraphDiagnostic>());
         }
 
-        var projection = new StoredBundleProjection(
-            reader.GetString(0),
-            reader.GetString(1),
-            reader.IsDBNull(2) ? null : reader.GetString(2),
-            reader.IsDBNull(3) ? null : reader.GetString(3),
-            reader.IsDBNull(4) ? null : reader.GetString(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5),
-            reader.GetInt32(6),
-            ParseTimestamp(reader.GetString(7)),
-            Array.Empty<StoredMember>(),
-            Array.Empty<GraphDiagnostic>());
-        await reader.DisposeAsync();
+        if (BeforeAggregateChildrenReadAsync is not null)
+        {
+            await BeforeAggregateChildrenReadAsync(cancellationToken);
+        }
 
-        var members = await ReadMembersAsync(connection, bundleIdentity, cancellationToken);
-        var diagnostics = await ReadDiagnosticsAsync(connection, bundleIdentity, cancellationToken);
+        var members = await ReadMembersAsync(connection, transaction, bundleIdentity, cancellationToken);
+        var diagnostics = await ReadDiagnosticsAsync(connection, transaction, bundleIdentity, cancellationToken);
         return projection with { Members = members, Diagnostics = diagnostics };
     }
 
@@ -451,19 +466,24 @@ public sealed class ProjectionStore : IDisposable
 
     private static async Task<IReadOnlyList<StoredMember>> ReadMembersAsync(
         SqliteConnection connection,
+        SqliteTransaction transaction,
         string bundleIdentity,
         CancellationToken cancellationToken)
     {
         var members = new List<StoredMember>();
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
-            SELECT position, label, resource_kind, resource_identity, resource_uri, resource_format,
-                   resource_cid, resource_title, projected_kind, projected_title, projected_text,
-                   projected_link, projected_published, projected_metadata_json
-            FROM bundle_members
-            WHERE bundle_identity = $identity
-            ORDER BY position;
+            SELECT bm.position, bm.label, bm.resource_kind, bm.resource_identity, bm.resource_uri,
+                   bm.resource_format, bm.resource_cid, bm.resource_title, sr.cid, sr.revision,
+                   bm.projected_kind, bm.projected_title, bm.projected_text, bm.projected_link,
+                   bm.projected_published, bm.projected_metadata_json
+            FROM bundle_members AS bm
+            LEFT JOIN source_records AS sr
+                ON sr.record_identity = bm.source_record_identity
+            WHERE bm.bundle_identity = $identity
+            ORDER BY bm.position;
             """;
         SqliteValue.Add(command, "$identity", bundleIdentity);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -478,7 +498,9 @@ public sealed class ProjectionStore : IDisposable
                 reader.IsDBNull(5) ? null : reader.GetString(5),
                 reader.IsDBNull(6) ? null : reader.GetString(6),
                 reader.IsDBNull(7) ? null : reader.GetString(7),
-                ReadProjection(reader, 8)));
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                ReadProjection(reader, 10)));
         }
 
         return members;
@@ -486,11 +508,13 @@ public sealed class ProjectionStore : IDisposable
 
     private static async Task<IReadOnlyList<GraphDiagnostic>> ReadDiagnosticsAsync(
         SqliteConnection connection,
+        SqliteTransaction transaction,
         string bundleIdentity,
         CancellationToken cancellationToken)
     {
         var diagnostics = new List<GraphDiagnostic>();
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             SELECT code, message, severity, resource_identity, position
@@ -532,10 +556,13 @@ public sealed class ProjectionStore : IDisposable
     private static DateTimeOffset ParseTimestamp(string value) =>
         DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
-    private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    internal async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {
         var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA foreign_keys = ON;";
+        await command.ExecuteNonQueryAsync(cancellationToken);
         return connection;
     }
 

@@ -23,6 +23,13 @@ flowchart LR
 repository's draft transport envelope, preserving indexed timestamp, source
 CID/revision, and diagnostics without altering the primitives contract.
 
+`ProjectionStore.ReadBundleAsync` starts one deferred read transaction and
+loads the bundle header, ordered members (including joined source-record
+provenance), and diagnostics before disposing that transaction. This gives one
+SQLite snapshot to the aggregate response even if a projection update or
+delete commits while the read is in progress. Every operational connection
+also enables SQLite's connection-local foreign-key enforcement.
+
 The Reader references only the contracts assembly. It has no project reference
 to the application or SQLite assembly, so the HTTP boundary is real even when
 the API and Reader run on the same machine.

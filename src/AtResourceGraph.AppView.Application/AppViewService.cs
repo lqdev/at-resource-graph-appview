@@ -123,8 +123,8 @@ public sealed class AppViewService : IResourceGraphAppView
             member.Kind,
             member.Identity,
             member.Uri,
-            member.Cid,
-            null,
+            member.SourceCid ?? member.Cid,
+            member.SourceRevision,
             member.Projection is null
                 ? null
                 : new AppViewProjectedResource(

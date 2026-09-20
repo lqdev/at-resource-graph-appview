@@ -71,6 +71,8 @@ public sealed record StoredMember(
     string? Format,
     string? Cid,
     string? Title,
+    string? SourceCid,
+    string? SourceRevision,
     ProjectedResource? Projection);
 
 internal static class SqliteValue
