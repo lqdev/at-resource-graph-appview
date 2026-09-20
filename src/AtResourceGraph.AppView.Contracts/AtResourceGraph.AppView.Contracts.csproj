@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>AtResourceGraph.AppView.Contracts</AssemblyName>
+    <RootNamespace>AtResourceGraph.AppView.Contracts</RootNamespace>
+  </PropertyGroup>
+</Project>

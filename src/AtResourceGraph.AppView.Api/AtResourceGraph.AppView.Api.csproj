@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>AtResourceGraph.AppView.Api</AssemblyName>
+    <RootNamespace>AtResourceGraph.AppView.Api</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AtResourceGraph.AppView.Application\AtResourceGraph.AppView.Application.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>AtResourceGraph.Seed</AssemblyName>
+    <RootNamespace>AtResourceGraph.Seed</RootNamespace>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AtResourceGraph.AppView.Application\AtResourceGraph.AppView.Application.csproj" />
+  </ItemGroup>
+</Project>

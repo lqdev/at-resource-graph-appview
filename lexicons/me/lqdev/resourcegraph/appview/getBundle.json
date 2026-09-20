@@ -1,0 +1,86 @@
+{
+  "lexicon": 1,
+  "id": "me.lqdev.resourcegraph.appview.getBundle",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Draft incubation query for one fixture-backed indexed bundle.",
+      "parameters": {
+        "type": "params",
+        "required": ["bundle"],
+        "properties": {
+          "bundle": {
+            "type": "string",
+            "description": "Stable bundle identity, usually an at:// URI."
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "ref",
+          "ref": "#bundleResponse"
+        }
+      }
+    },
+    "bundleResponse": {
+      "type": "object",
+      "required": ["bundleIdentity", "name", "source", "indexedAt", "projectionVersion", "members", "diagnostics"],
+      "properties": {
+        "bundleIdentity": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "source": { "type": "ref", "ref": "#source" },
+        "indexedAt": { "type": "string", "format": "datetime" },
+        "projectionVersion": { "type": "integer" },
+        "members": { "type": "array", "items": { "type": "ref", "ref": "#member" } },
+        "diagnostics": { "type": "array", "items": { "type": "ref", "ref": "#diagnostic" } }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cid": { "type": "string" },
+        "revision": { "type": "string" }
+      }
+    },
+    "member": {
+      "type": "object",
+      "required": ["position", "kind", "identity"],
+      "properties": {
+        "position": { "type": "integer" },
+        "label": { "type": "string" },
+        "kind": { "type": "string" },
+        "identity": { "type": "string" },
+        "uri": { "type": "string" },
+        "sourceCid": { "type": "string" },
+        "sourceRevision": { "type": "string" },
+        "projected": { "type": "ref", "ref": "#projected" }
+      }
+    },
+    "projected": {
+      "type": "object",
+      "required": ["kind", "metadata"],
+      "properties": {
+        "kind": { "type": "string" },
+        "title": { "type": "string" },
+        "text": { "type": "string" },
+        "link": { "type": "string" },
+        "published": { "type": "string", "format": "datetime" },
+        "metadata": { "type": "object", "properties": {} }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": ["code", "message", "severity"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "severity": { "type": "string" },
+        "resourceIdentity": { "type": "string" },
+        "position": { "type": "integer" }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+artifacts/
+data/*.db
+data/*.db-shm
+data/*.db-wal
