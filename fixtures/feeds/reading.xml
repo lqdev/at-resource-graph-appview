@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example reading feed</title>
+    <link>https://example.test/feeds/reading.xml</link>
+    <description>Offline syndication fixture</description>
+    <item>
+      <guid>fixture-item-1</guid>
+      <title>Offline fixture item</title>
+      <link>https://example.test/items/fixture-1</link>
+      <description>This item is projected from a checked-in RSS fixture.</description>
+      <pubDate>Sat, 19 Sep 2026 14:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

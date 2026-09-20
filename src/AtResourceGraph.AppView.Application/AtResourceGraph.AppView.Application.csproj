@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>AtResourceGraph.AppView.Application</AssemblyName>
+    <RootNamespace>AtResourceGraph.AppView.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AtResourceGraph.AppView.Contracts\AtResourceGraph.AppView.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ResourceGraph.AppView" />
+    <PackageReference Include="ResourceGraph.AtProto" />
+    <PackageReference Include="ResourceGraph.Bluesky" />
+    <PackageReference Include="ResourceGraph.Core" />
+    <PackageReference Include="ResourceGraph.Syndication" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+</Project>

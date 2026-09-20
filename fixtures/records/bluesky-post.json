@@ -1,0 +1,9 @@
+{
+  "uri": "at://did:plc:fixture/app.bsky.feed.post/3fixture",
+  "cid": "bafyfixturecid",
+  "value": {
+    "$type": "app.bsky.feed.post",
+    "text": "A public fixture post.",
+    "createdAt": "2026-09-19T14:00:00Z"
+  }
+}

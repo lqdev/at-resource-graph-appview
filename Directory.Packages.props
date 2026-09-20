@@ -1,0 +1,20 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="ResourceGraph.AppView" Version="0.1.0-preview.1" />
+    <PackageVersion Include="ResourceGraph.AtProto" Version="0.1.0-preview.1" />
+    <PackageVersion Include="ResourceGraph.Bluesky" Version="0.1.0-preview.1" />
+    <PackageVersion Include="ResourceGraph.Core" Version="0.1.0-preview.1" />
+    <PackageVersion Include="ResourceGraph.Syndication" Version="0.1.0-preview.1" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+  </ItemGroup>
+</Project>
